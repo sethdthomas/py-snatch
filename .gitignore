@@ -156,3 +156,4 @@ cython_debug/
 *.pcapng
 *.python-version
 *.csv
+src/secrets.ini
