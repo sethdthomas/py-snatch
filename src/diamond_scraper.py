@@ -29,9 +29,9 @@ def import_configs():
 
     config = configparser.ConfigParser()
     config.optionxform = str
-    config.read('headers.ini')
-    config.read('request_filter.ini')
-    config.read('secrets.ini')
+    config.read('config/headers.ini')
+    config.read('config/request_filter.ini')
+    config.read('config/secrets.ini')
 
     return config
 
