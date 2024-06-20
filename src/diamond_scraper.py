@@ -22,7 +22,10 @@ logging.basicConfig(level = logging.INFO,
                     format = '%(asctime)s- %(levelname)s - %(message)s')
 
 def import_configs():
-    logging.info("Importing Configuration Files")
+    '''
+    Imports all .ini files.
+    :return: config parser class containing all .ini data
+    '''
 
     config = configparser.ConfigParser()
     config.optionxform = str
@@ -30,41 +33,55 @@ def import_configs():
     config.read('request_filter.ini')
     config.read('secrets.ini')
 
-    logging.info("Successfully imported configuration files")
     return config
 
 
 def gen_base_url(config):
-    logging.info("Generating starting URL based on parameters in the request_filter.ini file")
+    '''
+    Generates a URL based on the request_filter.ini data.
+    :param config: Config data from all .ini files
+    :return: final_url: String URL
+    '''
 
     base_url = "https://www.brilliantearth.com/lab-diamonds/list/?"
     url_request_filter = dict(config.items('DIAMOND_REQUEST'))
 
+    # Loops through key / pairs specified in config
     url_append = ''
     for key in url_request_filter:
         url_append = url_append + key + "=" + url_request_filter[key] + '&'
 
     final_url = base_url + url_append
 
-    logging.info("Successfully generated base URL")
-
     return final_url
 
 
 def send_request(config, url: str):
-
+    '''
+    Handles all HTTP requests in the script.
+    :param config: Config data from all .ini files (used for headers)
+    :param url: String containing a URL
+    :return: response: request library response item (only returns if response 200; exits otherwise)
+    '''
 
     headers = dict(config.items('HEADERS'))
     req = requests.session()
     response = req.get(url=url, headers=headers)
-    # print(response.status_code)
-
     response = response_handler(response, url)
 
     return response
 
 
 def response_handler(response, url: str):
+    '''
+    Handles all responses received from requests in the script.
+    :param response: Requests library response object
+    :param url: String containing a URL
+    :return: decoded_response: Python dictionary object containing the JSON response
+    '''
+
+    decoded_response = None
+
     match response.status_code:
         case 200:
             try:
@@ -78,7 +95,7 @@ def response_handler(response, url: str):
                 logging.info(f'Response returned in json format')
 
             # Decode the JSON content
-            response = json.loads(decompressed_content)
+            decoded_response = json.loads(decompressed_content)
 
         case 403:
             logging.warning(f"Cloudflare has blocked this request resulting in response code {response.status_code}"
@@ -92,10 +109,18 @@ def response_handler(response, url: str):
                              f"Response code received = {response.status_code}")
             exit(f'Please check log...')
 
-    return response
+    return decoded_response
 
 
-def response_parser(response, db_defaults: dict):
+def response_parser(response: dict, db_defaults: dict):
+    '''
+    Parses the returned json dictionary ensuring all values match with the database table schema.
+    If the key is not found in the response it is coerced to a default value.
+    :param response: Dictionary containing diamond data from the website
+    :param db_defaults: Dictionary outlining the database table schema
+    :return: data_tuples: A list of tuples containing parsed / default data about the Diamond
+    '''
+
     # Creating a list to hold all Diamond data (which will be stored in tuples)
     data_tuples = []
 
@@ -114,6 +139,12 @@ def response_parser(response, db_defaults: dict):
 
 
 def page_incrementer(url: str, page_number: int):
+    '''
+    Takes a pre-generated URL and increments the page=X parameter.
+    :param url: String containing a URL
+    :param page_number: Integer of the current page number. Increments each loop
+    :return: url: String containing a URL with an incremented page number
+    '''
 
     # Creates the string we are seeking
     page_num_find = page_number
@@ -130,8 +161,13 @@ def page_incrementer(url: str, page_number: int):
 
 
 def sql_string_generator(db_defaults: dict):
-    sql_str = ''
-    sql_str += 'INSERT INTO be_diamonds '
+    '''
+    Generates a SQL statement using the db_defaults dictionary that matches the table schema.
+    :param db_defaults: Dictionary outlining the database table schema
+    :return: sql_str: SQL command that will insert data into the database
+    '''
+
+    sql_str = 'INSERT INTO be_diamonds '
     sql_str += '('
 
     for key in db_defaults:
@@ -172,17 +208,21 @@ def main():
 
 
     # Importing configuration parameters
+    logging.info("Importing configuration files")
     config = import_configs()
-
+    logging.info("Successfully imported configuration files")
 
     # Importing table schema and default values
+    logging.info("Importing database defaults dictionary")
     db_defaults = db.db_defaults.table_defaults
-
+    logging.info("Successfully imported database defaults")
 
     # Generate the base URL (page one) of the request
     # This is done to get the "total_count" parameter which will determine
     # how many pages of diamonds must be scraped for completion
+    logging.info("Generating starting URL based on parameters in the request_filter.ini file")
     url = gen_base_url(config)
+    logging.info("Successfully generated base URL")
 
 
     # Requesting the data & saving the total count:
